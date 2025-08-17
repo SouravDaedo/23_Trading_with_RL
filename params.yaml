@@ -1,0 +1,87 @@
+# DVC Parameters File - Tracks all model configurations
+# This file is used by DVC to track parameter changes across experiments
+
+# Data Parameters
+data:
+  symbols: ["AAPL", "GOOGL", "MSFT", "TSLA"]
+  start_date: "2020-01-01"
+  end_date: "2023-12-31"
+  train_split: 0.8
+  lookback_window: 20
+  interval: "1d"
+  period: "max"
+
+# Environment Parameters
+environment:
+  initial_balance: 10000
+  transaction_cost: 0.001
+  max_position: 1.0
+  reward_scaling: 1.0
+
+# Technical Indicators
+indicators:
+  - "SMA_10"
+  - "SMA_20"
+  - "RSI_14"
+  - "MACD"
+  - "BB_upper"
+  - "BB_lower"
+  - "volume_sma"
+
+# Model Architecture
+model:
+  hidden_layers: [256, 128, 64]
+  activation: "relu"
+  layer_activations: ["relu", "tanh", "leaky_relu"]
+  dropout: 0.2
+
+# DQN Training Parameters
+training:
+  episodes: 1000
+  batch_size: 32
+  learning_rate: 0.0001
+  gamma: 0.95
+  epsilon_start: 1.0
+  epsilon_end: 0.01
+  epsilon_decay: 0.995
+  memory_size: 10000
+  target_update: 100
+
+# SAC Parameters
+sac:
+  learning_rate: 0.0003
+  gamma: 0.99
+  tau: 0.005
+  alpha: 0.2
+  batch_size: 256
+  memory_size: 1000000
+  target_update_interval: 1
+  automatic_entropy_tuning: true
+
+# Multi-Agent Parameters
+multi_agent:
+  enabled: true
+  symbols: ["AAPL", "GOOGL", "MSFT", "TSLA"]
+  agent_types: ["dqn", "sac", "dqn", "sac"]
+  allocation_agent:
+    type: "sac"
+    update_frequency: 10
+    min_allocation: 0.01
+    max_allocation: 0.70
+  coordination:
+    communication: false
+    shared_memory: false
+    ensemble_decisions: false
+
+# Evaluation Parameters
+evaluation:
+  test_episodes: 10
+  save_plots: true
+  metrics: ["total_return", "sharpe_ratio", "max_drawdown", "win_rate"]
+
+# Experiment Tracking
+experiment:
+  name: "baseline"
+  description: "Baseline multi-agent trading system"
+  tags: ["multi_agent", "dqn", "sac", "trading"]
+  author: "trading_team"

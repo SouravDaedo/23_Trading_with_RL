@@ -11,24 +11,65 @@ import os
 class DQNNetwork(nn.Module):
     """Deep Q-Network for trading decisions."""
     
-    def __init__(self, input_size: int, hidden_layers: List[int], output_size: int, dropout: float = 0.2):
-        """Initialize the DQN network."""
+    def __init__(self, input_size: int, hidden_layers: List[int], output_size: int, 
+                 dropout: float = 0.2, activations: List[str] = None):
+        """
+        Initialize the DQN network.
+        
+        Args:
+            input_size: Size of input layer
+            hidden_layers: List of hidden layer sizes
+            output_size: Size of output layer
+            dropout: Dropout rate
+            activations: List of activation functions for each layer (optional)
+        """
         super(DQNNetwork, self).__init__()
+        
+        # Default to ReLU if no activations specified
+        if activations is None:
+            activations = ["relu"] * len(hidden_layers)
+        
+        # Validate activations list length
+        if len(activations) != len(hidden_layers):
+            raise ValueError(f"Number of activations ({len(activations)}) must match "
+                           f"number of hidden layers ({len(hidden_layers)})")
         
         layers = []
         prev_size = input_size
         
-        # Hidden layers
-        for hidden_size in hidden_layers:
+        # Hidden layers with configurable activations
+        for i, hidden_size in enumerate(hidden_layers):
             layers.append(nn.Linear(prev_size, hidden_size))
-            layers.append(nn.ReLU())
+            layers.append(self._get_activation(activations[i]))
             layers.append(nn.Dropout(dropout))
             prev_size = hidden_size
         
-        # Output layer
+        # Output layer (no activation - raw Q-values)
         layers.append(nn.Linear(prev_size, output_size))
         
         self.network = nn.Sequential(*layers)
+    
+    def _get_activation(self, activation_name: str) -> nn.Module:
+        """Get activation function by name."""
+        activations = {
+            "relu": nn.ReLU(),
+            "tanh": nn.Tanh(),
+            "sigmoid": nn.Sigmoid(),
+            "leaky_relu": nn.LeakyReLU(0.01),
+            "elu": nn.ELU(),
+            "swish": nn.SiLU(),  # SiLU is PyTorch's implementation of Swish
+            "gelu": nn.GELU(),
+            "selu": nn.SELU(),
+            "prelu": nn.PReLU(),
+            "softplus": nn.Softplus()
+        }
+        
+        if activation_name.lower() not in activations:
+            available = list(activations.keys())
+            raise ValueError(f"Activation '{activation_name}' not supported. "
+                           f"Available: {available}")
+        
+        return activations[activation_name.lower()]
         
     def forward(self, x):
         """Forward pass through the network."""
@@ -81,8 +122,11 @@ class DQNAgent:
         hidden_layers = self.config['model']['hidden_layers']
         dropout = self.config['model']['dropout']
         
-        self.q_network = DQNNetwork(state_size, hidden_layers, action_size, dropout).to(self.device)
-        self.target_network = DQNNetwork(state_size, hidden_layers, action_size, dropout).to(self.device)
+        # Get activation functions (per-layer or single)
+        activations = self._get_activations()
+        
+        self.q_network = DQNNetwork(state_size, hidden_layers, action_size, dropout, activations).to(self.device)
+        self.target_network = DQNNetwork(state_size, hidden_layers, action_size, dropout, activations).to(self.device)
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=self.learning_rate)
         
         # Initialize target network
@@ -202,3 +246,27 @@ class DQNAgent:
             'avg_q_value': np.mean(self.q_values[-100:]) if self.q_values else 0,
             'memory_size': len(self.memory)
         }
+    
+    def _get_activations(self) -> List[str]:
+        """Get activation functions from config (per-layer or single)."""
+        model_config = self.config['model']
+        hidden_layers = model_config['hidden_layers']
+        
+        # Check if per-layer activations are specified
+        if 'layer_activations' in model_config and model_config['layer_activations']:
+            layer_activations = model_config['layer_activations']
+            
+            # Validate length matches hidden layers
+            if len(layer_activations) != len(hidden_layers):
+                print(f"Warning: layer_activations length ({len(layer_activations)}) "
+                      f"doesn't match hidden_layers length ({len(hidden_layers)})")
+                print("Falling back to single activation function")
+                return [model_config.get('activation', 'relu')] * len(hidden_layers)
+            
+            print(f"Using per-layer activations: {layer_activations}")
+            return layer_activations
+        else:
+            # Use single activation for all layers
+            single_activation = model_config.get('activation', 'relu')
+            print(f"Using single activation '{single_activation}' for all layers")
+            return [single_activation] * len(hidden_layers)

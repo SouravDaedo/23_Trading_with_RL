@@ -20,12 +20,23 @@ class DataLoader:
         self.lookback_window = self.config['data']['lookback_window']
         self.indicators = self.config['indicators']
         
+        # Timestep configuration
+        self.interval = self.config['data'].get('interval', '1d')
+        self.period = self.config['data'].get('period', 'max')
+        
     def download_data(self, symbol: str) -> pd.DataFrame:
-        """Download historical data for a given symbol."""
+        """Download historical data for a given symbol with configurable timestep."""
         try:
             ticker = yf.Ticker(symbol)
-            data = ticker.history(start=self.start_date, end=self.end_date)
+            
+            # Use interval for timestep granularity
+            if self.start_date and self.end_date:
+                data = ticker.history(start=self.start_date, end=self.end_date, interval=self.interval)
+            else:
+                data = ticker.history(period=self.period, interval=self.interval)
+            
             data.index = pd.to_datetime(data.index)
+            print(f"Downloaded {len(data)} timesteps for {symbol} at {self.interval} intervals")
             return data
         except Exception as e:
             print(f"Error downloading data for {symbol}: {e}")

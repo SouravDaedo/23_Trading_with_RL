@@ -7,6 +7,9 @@ data:
   end_date: "2023-12-31"
   train_split: 0.8
   lookback_window: 20
+  # Timestep Configuration
+  interval: "1d"  # Options: 1m, 5m, 15m, 30m, 1h, 1d, 1wk, 1mo
+  period: "max"   # For live data: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max
 
 # Environment Settings
 environment:
@@ -28,10 +31,14 @@ indicators:
 # Model Architecture
 model:
   hidden_layers: [256, 128, 64]
+  # Option 1: Single activation for all layers
   activation: "relu"
+  # Option 2: Per-layer activations (overrides single activation if provided)
+  layer_activations: ["relu", "tanh", "leaky_relu"]  # Must match hidden_layers length
   dropout: 0.2
+  # Available activations: relu, tanh, sigmoid, leaky_relu, elu, swish, gelu
 
-# Training Parameters
+# Training Parameters (DQN)
 training:
   episodes: 1000
   batch_size: 32
@@ -42,6 +49,32 @@ training:
   epsilon_decay: 0.995
   memory_size: 10000
   target_update: 100
+
+# SAC Parameters
+sac:
+  learning_rate: 0.0003
+  gamma: 0.99
+  tau: 0.005  # Soft update parameter
+  alpha: 0.2  # Temperature parameter (entropy regularization)
+  batch_size: 256
+  memory_size: 1000000
+  target_update_interval: 1
+  automatic_entropy_tuning: true  # Automatically tune alpha
+
+# Multi-Agent Settings
+multi_agent:
+  enabled: true
+  symbols: ["AAPL", "GOOGL", "MSFT", "TSLA"]
+  agent_types: ["dqn", "sac", "dqn", "sac"]  # Agent type for each symbol
+  allocation_agent:
+    type: "sac"  # Agent type for portfolio allocation
+    update_frequency: 10  # Update allocation every N steps
+    min_allocation: 0.01  # Minimum allocation per stock (1%)
+    max_allocation: 0.70  # Maximum allocation per stock (70%)
+  coordination:
+    communication: false  # Enable agent communication
+    shared_memory: false  # Share experiences between agents
+    ensemble_decisions: false  # Use ensemble for final decisions
 
 # Evaluation
 evaluation:

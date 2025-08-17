@@ -1,0 +1,86 @@
+stages:
+  data_preparation:
+    cmd: python -c "from src.data.data_loader import DataLoader; dl = DataLoader(); [dl.load_data(s) for s in ['AAPL', 'GOOGL', 'MSFT', 'TSLA']]"
+    deps:
+    - src/data/data_loader.py
+    - config/config.yaml
+    outs:
+    - data/processed/
+
+  train_dqn:
+    cmd: python train_agent_unified.py --agent dqn --symbol ${item}
+    foreach:
+      - AAPL
+      - GOOGL  
+      - MSFT
+      - TSLA
+    deps:
+    - src/agents/dqn_agent.py
+    - src/environment/trading_env.py
+    - config/config.yaml
+    - data/processed/
+    params:
+    - training
+    - model
+    - environment
+    outs:
+    - models/dqn_${item}/
+    metrics:
+    - metrics/dqn_${item}_metrics.json
+
+  train_sac:
+    cmd: python train_agent_unified.py --agent sac --symbol ${item}
+    foreach:
+      - AAPL
+      - GOOGL
+      - MSFT  
+      - TSLA
+    deps:
+    - src/agents/sac_agent.py
+    - src/environment/continuous_trading_env.py
+    - config/config.yaml
+    - data/processed/
+    params:
+    - sac
+    - model
+    - environment
+    outs:
+    - models/sac_${item}/
+    metrics:
+    - metrics/sac_${item}_metrics.json
+
+  train_multi_agent:
+    cmd: python train_multi_agent.py
+    deps:
+    - src/agents/multi_agent_system.py
+    - src/agents/dqn_agent.py
+    - src/agents/sac_agent.py
+    - config/config.yaml
+    - data/processed/
+    params:
+    - multi_agent
+    - training
+    - sac
+    - model
+    - environment
+    outs:
+    - models/multi_agent/
+    metrics:
+    - metrics/multi_agent_metrics.json
+    plots:
+    - plots/multi_agent_training.png
+
+  evaluate_models:
+    cmd: python evaluate_agent.py --model-dir ${item}
+    foreach:
+      - models/dqn_AAPL/
+      - models/sac_AAPL/
+      - models/multi_agent/
+    deps:
+    - ${item}
+    - src/evaluation/
+    - config/config.yaml
+    metrics:
+    - metrics/evaluation_${item}.json
+    plots:
+    - plots/evaluation_${item}.png
