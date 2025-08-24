@@ -294,6 +294,27 @@
             </div>
         </div>
 
+        <!-- Episode Statistics -->
+        <div class="card episode-stats">
+            <h3><i class="fas fa-tachometer-alt"></i> Episode Statistics</h3>
+            <div class="metric">
+                <div class="metric-value" id="episode-duration">0.00s</div>
+                <div class="metric-label">Duration</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="steps-per-sec">0.00</div>
+                <div class="metric-label">Steps/Sec</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="episode-reward">0.00</div>
+                <div class="metric-label">Reward</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="episode-actions">0</div>
+                <div class="metric-label">Total Actions</div>
+            </div>
+        </div>
+
         <!-- Actions Summary -->
         <div class="card actions-summary">
             <h3><i class="fas fa-exchange-alt"></i> Actions</h3>
@@ -469,27 +490,22 @@
             }
         });
 
-        // Socket event handlers
-        socket.on('connect', function() {
-            document.getElementById('connection-status').textContent = 'Connected';
-            console.log('Connected to dashboard');
-        });
+        // Format number with commas and 2 decimal places
+        function formatNumber(num) {
+            if (num === null || num === undefined) return '0.00';
+            return num.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
 
-        socket.on('disconnect', function() {
-            document.getElementById('connection-status').textContent = 'Disconnected';
-            console.log('Disconnected from dashboard');
-        });
-
-        socket.on('data_update', function(data) {
-            updateDashboard(data);
-        });
-
+        // Update dashboard with new data
         function updateDashboard(data) {
             console.log('Dashboard update received:', data);
             
             // Update portfolio metrics
-            document.getElementById('portfolio-value').textContent = `$${data.portfolio_value.toLocaleString()}`;
-            document.getElementById('current-price').textContent = `$${data.current_price.toFixed(2)}`;
+            document.getElementById('portfolio-value').textContent = `$${formatNumber(data.portfolio_value || 0)}`;
+            document.getElementById('current-price').textContent = `$${formatNumber(data.current_price || 0)}`;
             
             // Update positions
             if (data.positions) {
@@ -502,8 +518,11 @@
                 total_return: 0,
                 sharpe_ratio: 0,
                 max_drawdown: 0,
-                win_rate: 0
+                win_rate: 0,
+                episode_time: 0,
+                steps_per_second: 0
             };
+            
             document.getElementById('total-return').textContent = `${metrics.total_return}%`;
             document.getElementById('total-return').className = `metric-value ${metrics.total_return >= 0 ? 'positive' : 'negative'}`;
             
@@ -526,18 +545,45 @@
             
             document.getElementById('current-loss').textContent = (agentParams.loss || 0).toFixed(4);
 
+            // Calculate and update action counts
+            const actions = data.actions || { BUY: 0, SELL: 0, HOLD: 0 };
+            const totalActions = actions.BUY + actions.SELL + actions.HOLD;
+            
             // Update action counts
-            const actions = data.actions || {BUY: 0, HOLD: 0, SELL: 0};
             document.getElementById('buy-count').textContent = actions.BUY;
-            document.getElementById('hold-count').textContent = actions.HOLD;
             document.getElementById('sell-count').textContent = actions.SELL;
+            document.getElementById('hold-count').textContent = actions.HOLD;
+            
+            // Update episode statistics
+            document.getElementById('episode-duration').textContent = 
+                (metrics.episode_time || 0).toFixed(2) + 's';
+            document.getElementById('steps-per-sec').textContent = 
+                (metrics.steps_per_second || 0).toFixed(2);
+            document.getElementById('episode-reward').textContent = 
+                (data.episode_summary?.reward || 0).toFixed(2);
+            document.getElementById('episode-actions').textContent = totalActions;
 
             // Update charts
             updateCharts(data);
 
             // Update recent actions
-            updateRecentActions(data.recent_actions);
+            updateRecentActions(data.recent_actions || []);
         }
+
+        // Socket event handlers
+        socket.on('connect', function() {
+            document.getElementById('connection-status').textContent = 'Connected';
+            console.log('Connected to dashboard');
+        });
+
+        socket.on('disconnect', function() {
+            document.getElementById('connection-status').textContent = 'Disconnected';
+            console.log('Disconnected from dashboard');
+        });
+
+        socket.on('data_update', function(data) {
+            updateDashboard(data);
+        });
 
         function updateCharts(data) {
             // Update portfolio chart

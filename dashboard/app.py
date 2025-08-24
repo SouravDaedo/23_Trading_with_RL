@@ -37,21 +37,34 @@ class DashboardDataManager:
             'portfolio_history': [],
             'price_history': [],
             'rewards': [],
-            'agent_params': {'epsilon': 0, 'alpha': 0, 'loss': 0},
+            'agent_params': {
+                'epsilon': 0, 
+                'alpha': 0, 
+                'loss': 0,
+                'steps_per_second': 0,
+                'episode_duration': 0
+            },
             'performance_metrics': {
                 'total_return': 0,
                 'sharpe_ratio': 0,
                 'max_drawdown': 0,
-                'win_rate': 0
+                'win_rate': 0,
+                'episode_time': 0,
+                'steps_per_second': 0
             },
             'positions': {'cash': 10000, 'shares': 0, 'total_value': 10000},
             'price_window': [],
-            'timestamp_window': []
+            'timestamp_window': [],
+            'episode_summary': {}
         }
         self.is_running = False
         
     def update_data(self, new_data):
-        """Update dashboard data"""
+        """Update dashboard data with new values from the training script"""
+        # Update episode summary if provided
+        if 'episode_summary' in new_data:
+            self.current_data['episode_summary'] = new_data['episode_summary']
+            
         # Update current data with new values
         for key, value in new_data.items():
             if key in ['actions', 'agent_params', 'positions']:
@@ -59,25 +72,45 @@ class DashboardDataManager:
                 if key not in self.current_data:
                     self.current_data[key] = {}
                 self.current_data[key].update(value)
+                
+                # Update performance metrics if available in agent_params
+                if key == 'agent_params':
+                    if 'steps_per_second' in value:
+                        self.current_data['performance_metrics']['steps_per_second'] = value['steps_per_second']
+                    if 'episode_duration' in value:
+                        self.current_data['performance_metrics']['episode_time'] = value['episode_duration']
+                        
             elif key == 'recent_actions':
                 # Keep only the last 10 actions
                 self.current_data['recent_actions'] = (self.current_data.get('recent_actions', []) + value)[-10:]
+                
             elif key in ['portfolio_history', 'price_history', 'rewards']:
                 # Append to history lists
                 if key not in self.current_data:
                     self.current_data[key] = []
-                self.current_data[key].extend(value)
+                if isinstance(value, (list, tuple)):
+                    self.current_data[key].extend(value)
+                else:
+                    self.current_data[key].append(value)
                 # Keep history lists at a reasonable size
                 self.current_data[key] = self.current_data[key][-1000:]
+                
             elif key == 'price_window':
                 # Update price window data
                 self.current_data['price_window'] = value
                 # Also update the current price to the last value in the window
                 if value and len(value) > 0:
                     self.current_data['current_price'] = value[-1]
+                    
             elif key == 'timestamp_window':
                 # Update timestamp window data
                 self.current_data['timestamp_window'] = value
+                
+            elif key == 'episode_reward' and 'rewards' in self.current_data:
+                # Handle episode reward specially to maintain rewards history
+                self.current_data['rewards'].append(value)
+                self.current_data['rewards'] = self.current_data['rewards'][-1000:]
+                
             else:
                 self.current_data[key] = value
                 

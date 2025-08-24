@@ -47,22 +47,52 @@ class DataLoader:
         try:
             ticker = yf.Ticker(symbol)
             
-            # For 1-minute data, we need to use a shorter lookback period
-            if self.timeframe == '1m':
-                # For 1m data, we can only get up to 7 days of intraday data
-                period = '7d'
-                interval = '1m'
-                end_date = pd.Timestamp.now()
-                start_date = end_date - pd.Timedelta(days=7)
+            # Get current time in UTC
+            end_date = pd.Timestamp.utcnow()
+            
+            # Default lookback period if not specified
+            if not self.lookback_period or not any(x in self.lookback_period for x in ['d', 'mo', 'y']):
+                # Default to 1 year if lookback period is not properly specified
+                start_date = end_date - pd.Timedelta(days=365)
             else:
-                period = self.lookback_period
+                # Calculate start date based on lookback period
+                if 'y' in self.lookback_period:
+                    years = int(self.lookback_period.replace('y', ''))
+                    start_date = end_date - pd.DateOffset(years=years)
+                elif 'mo' in self.lookback_period:
+                    months = int(self.lookback_period.replace('mo', ''))
+                    start_date = end_date - pd.DateOffset(months=months)
+                elif 'd' in self.lookback_period:
+                    days = int(self.lookback_period.replace('d', ''))
+                    start_date = end_date - pd.Timedelta(days=days)
+                else:
+                    start_date = end_date - pd.Timedelta(days=365)
+            
+            # For 1m data, we can only get up to 7 days of intraday data
+            if self.timeframe == '1m':
+                start_date = max(start_date, end_date - pd.Timedelta(days=7))
+                interval = '1m'
+            else:
                 interval = self.timeframe
-                end_date = pd.Timestamp.now()
-                start_date = end_date - pd.Timedelta(self.lookback_period)
+            
+            # For hourly data, ensure we don't exceed 730 days lookback
+            if self.timeframe == '1h':
+                max_lookback = end_date - pd.Timedelta(days=730)
+                start_date = max(start_date, max_lookback)
+            
+            # Ensure we don't request future data
+            start_date = min(start_date, end_date)
+            
+            # Convert to timezone-naive timestamps for yfinance
+            start_date = start_date.tz_localize(None)
+            end_date = end_date.tz_localize(None)
+            
+            print(f"Downloading {symbol} data from {start_date} to {end_date} with {interval} timeframe")
             
             # Download data with the specified timeframe
             data = ticker.history(
-                period=period,
+                start=start_date,
+                end=end_date,
                 interval=interval,
                 prepost=True  # Include pre/post market data for intraday timeframes
             )

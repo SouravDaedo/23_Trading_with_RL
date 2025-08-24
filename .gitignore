@@ -1,0 +1,99 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+!example.log
+
+# Data files
+*.csv
+*.h5
+*.hdf5
+*.pkl
+*.pth
+*.pt
+*.npy
+*.npz
+
+# Models
+models/
+!models/__init__.py
+
+# Checkpoints
+checkpoints/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# DVC
+data/
+.dvc/
+
+# Environment variables
+.env
+.env.local
+
+# Local development
+.local/
+
+# Project specific
+airflow/logs/
+airflow/plugins/
+airflow/airflow.db
+airflow/webserver_config.py
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~.nib/
+*.orig.*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific logs and outputs
+logs/progress/*.json
+logs/plots/*.png
+data/plots/
+data/*_all.csv
+data/*_raw_prices.csv
+data/*_processed_data.csv

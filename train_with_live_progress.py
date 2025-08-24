@@ -34,7 +34,7 @@ try:
     DASHBOARD_AVAILABLE = True
 except ImportError:
     DASHBOARD_AVAILABLE = False
-    print("⚠️  Dashboard integration not available. Install flask and flask-socketio to enable.")
+    print("Warning: Dashboard integration not available. Install flask and flask-socketio to enable.")
 
 class LiveProgressMonitor:
     """Real-time training progress monitor with live updates."""
@@ -49,7 +49,7 @@ class LiveProgressMonitor:
         self.dashboard = None
         if enable_dashboard and DASHBOARD_AVAILABLE:
             self.dashboard = DashboardConnector()
-            print("📊 Dashboard connector initialized")
+            print("Dashboard connector initialized")
         
         # Progress tracking
         self.current_episode = 0
@@ -240,15 +240,15 @@ class LiveProgressMonitor:
         print("=" * 80)
         print(f" LIVE TRAINING PROGRESS - Episode {stats['current_episode']}/{stats['total_episodes']}")
         if self.dashboard and self.dashboard.is_dashboard_connected():
-            print(" 📊 Dashboard: Connected at http://localhost:5000")
+            print("Dashboard: Connected at http://localhost:5000")
         elif self.enable_dashboard:
-            print(" 📊 Dashboard: Disconnected")
+            print("Dashboard: Disconnected")
         print("=" * 80)
         
         # Progress bar
         bar_length = 50
         filled_length = int(bar_length * stats['progress_pct'] / 100)
-        bar = '█' * filled_length + '░' * (bar_length - filled_length)
+        bar = '#' * filled_length + '-' * (bar_length - filled_length)
         print(f"Progress: [{bar}] {stats['progress_pct']:.1f}%")
         
         # Current episode stats
@@ -266,7 +266,7 @@ class LiveProgressMonitor:
         # Time estimates
         eta_str = str(timedelta(seconds=int(stats['eta_seconds'])))
         total_time_str = str(timedelta(seconds=int(stats['total_time'])))
-        print(f"\n⏱  Timing:")
+        print(f"\nTiming:")
         print(f"  Elapsed: {total_time_str} | ETA: {eta_str} | Speed: {stats['episodes_per_minute']:.1f} episodes/min")
         
         print("=" * 80)
@@ -303,10 +303,20 @@ def train_with_live_progress(config_path="config/config.yaml", agent_type="sac",
     # Prepare data for the first symbol
     symbol = config['data']['symbols'][0]
     
-    # Load and combine train/test data
-    train_data = pd.read_csv(f'data/{symbol}_train.csv', index_col=0, parse_dates=True)
-    test_data = pd.read_csv(f'data/{symbol}_test.csv', index_col=0, parse_dates=True)
-    all_data = pd.concat([train_data, test_data]).sort_index()
+    # Load the full processed data
+    all_data = pd.read_csv(f'data/{symbol}_processed_data.csv', index_col=0, parse_dates=True)
+    print(f"Loaded {len(all_data)} data points for {symbol}")
+    
+    # Calculate max steps based on data length and lookback window
+    lookback_window = config['data'].get('lookback_window', 24)
+    max_steps = len(all_data) - lookback_window - 1
+    print(f"Max steps per episode: {max_steps}")
+    
+    # Save the full data for reference
+    all_data.to_csv(f'data/{symbol}_all.csv')
+    
+    # For training, we'll use all data by default
+    # The train/test split is handled by the environment if needed
     
     # Initialize environment with first symbol's data
     first_symbol = symbol
@@ -330,8 +340,24 @@ def train_with_live_progress(config_path="config/config.yaml", agent_type="sac",
     agent = None
     
     try:
-        # Initialize environment
+        print("\n=== DEBUG: Before environment initialization ===")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"Config path: {config_path}")
+        print(f"Data shape: {all_data.shape}")
+        print(f"Data columns: {all_data.columns.tolist()}")
+        print(f"Data index type: {type(all_data.index)}")
+        
+        # Initialize environment with full data
+        print(f"\n=== Initializing environment with {len(all_data)} data points ===")
         env = ContinuousTradingEnvironment(all_data, config_path)
+        
+        print("\n=== Environment initialized successfully ===")
+        print(f"Lookback window: {env.lookback_window}")
+        print(f"Data length: {len(env.data)}")
+        print(f"Has prices: {hasattr(env, 'prices')}")
+        if hasattr(env, 'prices'):
+            print(f"Price data length: {len(env.prices)}")
+            print(f"Price data type: {type(env.prices)}")
         
         # Initialize agent based on type
         if agent_type.lower() == 'dqn':
@@ -349,7 +375,7 @@ def train_with_live_progress(config_path="config/config.yaml", agent_type="sac",
             
         # Print device info
         device = next(agent.q_network.parameters()).device if hasattr(agent, 'q_network') else 'cpu'
-        print(f"\n🚀 Using device: {device}")
+        print(f"\nUsing device: {device}")
         
         # Training loop
         for episode in range(num_episodes):
@@ -365,17 +391,34 @@ def train_with_live_progress(config_path="config/config.yaml", agent_type="sac",
                 done = False
                 step = 0
                 
-                print(f"\n📅 Episode {episode + 1}/{num_episodes}: Training on data from {all_data.index.min().date()} to {all_data.index.max().date()}")
+                print(f"\nEpisode {episode + 1}/{num_episodes}: Training on data from {all_data.index.min().date()} to {all_data.index.max().date()}")
+                
+                # Use all available data for training
+                max_steps = len(all_data) - env.lookback_window - 1
+                print(f"Episode {episode + 1}/{num_episodes}: Using {max_steps} steps of data")
                 
                 # Training loop for current episode
-                while not done and step < config['training'].get('max_steps_per_episode', 1000):
+                while not done and step < max_steps:
                     # Get action from agent
                     action = agent.select_action(state)
                     
                     try:
+                        # Log every 100 steps or when done
+                        if step % 100 == 0 or step == max_steps - 1 or done:
+                            print(f"Step {step}/{max_steps} - Position: {env.position:.4f}, "
+                                  f"Balance: ${env.balance:.2f}, Portfolio: ${env.portfolio_value:.2f}")
+                        
                         # Take a step in the environment
                         next_state, reward, terminated, truncated, info = env.step(action)
                         done = bool(terminated or truncated)
+                        
+                        # Log if episode ended unexpectedly
+                        if done and step < max_steps - 1:
+                            print(f"\nWarning: Episode ended early at step {step} (max steps: {max_steps})")
+                            print(f"Current step: {env.current_step}, Data length: {len(env.data)}")
+                            print(f"Terminated: {terminated}, Truncated: {truncated}")
+                            if hasattr(env, 'prices'):
+                                print(f"Current price: {env.prices[env.current_step] if env.current_step < len(env.prices) else 'N/A'}")
                         
                         # Update monitor with step information
                         monitor.update_step(
@@ -401,9 +444,9 @@ def train_with_live_progress(config_path="config/config.yaml", agent_type="sac",
                         # Train the agent
                         if (step + 1) % config['training'].get('update_every', 1) == 0:
                             if hasattr(agent, 'update_parameters'):
-                                loss = agent.update_parameters(monitor.recent_losses)
-                                if loss is not None:
-                                    monitor.current_loss = loss
+                                result = agent.update_parameters()
+                                if result is not None and 'actor_loss' in result:
+                                    monitor.current_loss = result['actor_loss']
                         
                         # Increment step counter
                         step += 1
@@ -426,21 +469,21 @@ def train_with_live_progress(config_path="config/config.yaml", agent_type="sac",
                 if (episode + 1) % config['training'].get('save_interval', 100) == 0:
                     model_path = f"models/{agent_type}_agent_{symbol}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pth"
                     torch.save(agent.state_dict(), model_path)
-                    print(f"💾 Checkpoint saved to {model_path}")
+                    print(f"Checkpoint saved to {model_path}")
                 
             except KeyboardInterrupt:
-                print(f"\n\n⚠️ Training interrupted by user at episode {episode + 1}/{num_episodes}")
+                print(f"\n\nWarning: Training interrupted by user at episode {episode + 1}/{num_episodes}")
                 print("Saving current progress...")
                 break
                 
             except Exception as e:
-                print(f"\n⚠️ Error during episode {episode + 1}/{num_episodes}: {e}")
+                print(f"\nError: Error during episode {episode + 1}/{num_episodes}: {e}")
                 import traceback
                 traceback.print_exc()
                 continue
     
     except Exception as e:
-        print(f"\n⚠️ Fatal error during training: {e}")
+        print(f"\nError: Fatal error during training: {e}")
         import traceback
         traceback.print_exc()
     
@@ -475,7 +518,7 @@ def train_with_live_progress(config_path="config/config.yaml", agent_type="sac",
     print("\n" + "=" * 60)
     print("📊 FINAL TRAINING SUMMARY")
     print("=" * 60)
-    print(f"Episodes Completed: {len(monitor.episode_rewards)}/{episodes}")
+    print(f"Episodes Completed: {len(monitor.episode_rewards)}/{num_episodes}")
     print(f"Total Training Time: {str(timedelta(seconds=int(final_stats['total_time'])))}")
     print(f"Average Episode Time: {np.mean(monitor.episode_times):.2f} seconds")
     print(f"Final Portfolio Value: ${final_stats['current_portfolio']:,.2f}")

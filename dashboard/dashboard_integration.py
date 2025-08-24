@@ -78,25 +78,45 @@ class DashboardConnector:
         else:
             action_str = 'HOLD'
             
+        # Create update data with all required fields
         update_data = {
-            'episode': episode,
-            'step': step,
-            'portfolio_value': float(portfolio_value),
-            'current_price': float(current_price),
+            'episode': int(episode) if episode is not None else 0,
+            'step': int(step) if step is not None else 0,
+            'portfolio_value': float(portfolio_value) if portfolio_value is not None else 0.0,
+            'current_price': float(current_price) if current_price is not None else 0.0,
             'recent_actions': [{
                 'action': action_str,
-                'price': float(current_price),
+                'price': float(current_price) if current_price is not None else 0.0,
                 'time': datetime.now().strftime('%H:%M:%S'),
-                'reward': float(reward)
+                'reward': float(reward) if reward is not None else 0.0
             }],
             'agent_params': {
                 'epsilon': float(agent_params.get('epsilon', 0)),
                 'alpha': float(agent_params.get('alpha', 0)),
-                'loss': float(agent_params.get('loss', 0))
+                'loss': float(agent_params.get('loss', 0)),
+                'steps_per_second': float(agent_params.get('steps_per_second', 0)),
+                'episode_duration': float(agent_params.get('episode_duration', 0))
             },
-            # Add 5-day price window for chart updates
-            'price_window': [float(p) for p in (price_window or [current_price])],
-            'timestamp_window': timestamp_window or [str(i) for i in range(len(price_window or [current_price]))]
+            'actions': {
+                'BUY': int(agent_params.get('buy_count', 0)),
+                'SELL': int(agent_params.get('sell_count', 0)),
+                'HOLD': int(agent_params.get('hold_count', 0))
+            },
+            'portfolio_history': [float(portfolio_value)] if portfolio_value is not None else [0.0],
+            'price_history': [float(current_price)] if current_price is not None else [0.0],
+            'rewards': [float(reward)] if reward is not None else [0.0],
+            'price_window': [float(p) for p in (price_window or [current_price])] if current_price is not None else [0.0],
+            'timestamp_window': timestamp_window or [str(i) for i in range(len(price_window or [current_price] if current_price is not None else [0.0]))],
+            'positions': positions or {'cash': 0, 'shares': 0, 'total_value': portfolio_value or 0},
+            'episode_summary': {
+                'reward': float(reward) if reward is not None else 0.0,
+                'portfolio_value': float(portfolio_value) if portfolio_value is not None else 0.0,
+                'actions': {
+                    'BUY': int(agent_params.get('buy_count', 0)),
+                    'SELL': int(agent_params.get('sell_count', 0)),
+                    'HOLD': int(agent_params.get('hold_count', 0))
+                }
+            }
         }
         
         if positions:
@@ -231,6 +251,11 @@ class DashboardIntegratedMonitor:
         self.episode_actions[action_name] += 1
         self.total_actions[action_name] += 1
         
+        # Update current values
+        self.current_portfolio = portfolio_value
+        self.current_reward = reward
+        self.current_price = current_price
+        
         # Update histories
         self.portfolio_history.append(portfolio_value)
         self.price_history.append(current_price)
@@ -277,6 +302,17 @@ class DashboardIntegratedMonitor:
     
     def finish_episode(self):
         """Finish episode and send summary to dashboard if enabled"""
+        # Calculate episode duration and steps per second
+        episode_duration = time.time() - self.episode_start_time
+        steps_per_second = self.current_step / max(episode_duration, 0.001)
+        
+        # Print episode summary to console
+        print(f"\nEpisode {self.current_episode + 1} completed in {episode_duration:.2f}s "
+              f"({steps_per_second:.1f} steps/sec)")
+        print(f"  Total reward: {self.current_reward:.2f}")
+        print(f"  Final portfolio value: {self.current_portfolio:.2f}")
+        print(f"  Actions taken: {self.episode_actions}")
+        
         # Send episode summary to dashboard if enabled
         if self.dashboard:
             self.dashboard.update_episode_end(
@@ -285,7 +321,28 @@ class DashboardIntegratedMonitor:
                 portfolio_history=self.portfolio_history,
                 price_history=self.price_history,
                 rewards_history=self.rewards_history,
-                actions_summary=self.total_actions
+                actions_summary=self.episode_actions  # Use episode actions instead of total
+            )
+            
+            # Add performance metrics to dashboard
+            self.dashboard.update_step(
+                episode=self.current_episode,
+                step=self.current_step,
+                action=None,
+                reward=self.current_reward,
+                portfolio_value=self.current_portfolio,
+                current_price=self.current_price,
+                agent_params={
+                    'epsilon' if self.agent_type.lower() == 'dqn' else 'alpha': self.current_epsilon,
+                    'loss': self.current_loss,
+                    'steps_per_second': steps_per_second,
+                    'episode_duration': episode_duration
+                },
+                positions={
+                    'cash': self.current_portfolio,
+                    'shares': 0,  # This would need to be tracked in the environment
+                    'total_value': self.current_portfolio
+                }
             )
     
     def print_live_progress(self):
