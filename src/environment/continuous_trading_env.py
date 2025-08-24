@@ -43,6 +43,9 @@ class ContinuousTradingEnvironment(TradingEnvironment):
         
         prev_portfolio_value = self.portfolio_value
         
+        # Get current price before executing action
+        current_price = self.prices[self.current_step]
+        
         # Execute continuous action
         reward = self._execute_continuous_action(action)
         
@@ -64,7 +67,8 @@ class ContinuousTradingEnvironment(TradingEnvironment):
             'position': self.position,
             'balance': self.balance,
             'step': self.current_step,
-            'action_value': float(action)
+            'action_value': float(action),
+            'current_price': current_price
         }
         
         return self._get_observation(), reward, done, truncated, info

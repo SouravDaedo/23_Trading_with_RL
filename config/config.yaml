@@ -6,27 +6,50 @@ data:
   start_date: "2020-01-01"
   end_date: "2023-12-31"
   train_split: 0.8
-  lookback_window: 20
-  # Timestep Configuration
-  interval: "1d"  # Options: 1m, 5m, 15m, 30m, 1h, 1d, 1wk, 1mo
-  period: "max"   # For live data: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max
+  # Lookback window in number of candles (automatically adjusted based on timeframe)
+  lookback_window: 24  # Will be adjusted based on timeframe
+  # Timeframe Configuration
+  timeframe: "1m"  # 1-minute candles for high-frequency trading
+  lookback_period: "3mo"  # Shorter period for 1m data to manage memory
 
 # Environment Settings
 environment:
   initial_balance: 10000
-  transaction_cost: 0.001  # 0.1% per trade
-  max_position: 1.0  # Maximum position size (100% of portfolio)
-  reward_scaling: 1.0
+  transaction_cost: 0.0005  # Lower cost for high-frequency trading
+  max_position: 0.5  # Smaller position size for high-frequency
+  reward_scaling: 10.0  # Higher scaling for smaller price movement
 
-# Technical Indicators
+# Technical Indicators (optimized for 1m data)
 indicators:
-  - "SMA_10"
-  - "SMA_20"
-  - "RSI_14"
-  - "MACD"
-  - "BB_upper"
-  - "BB_lower"
-  - "volume_sma"
+  # Moving Averages
+  - "SMA_5"     # 5-min SMA
+  - "SMA_15"    # 15-min SMA
+  - "SMA_60"    # 1-hour SMA
+  - "EMA_10"    # 10-period EMA
+  - "EMA_30"    # 30-period EMA
+  
+  # Momentum
+  - "RSI_7"     # 7-period RSI
+  - "RSI_14"    # 14-period RSI
+  - "MACD"      # MACD line
+  - "MACD_signal" # MACD signal line
+  - "MACD_hist"  # MACD histogram
+  
+  # Volatility
+  - "BB_upper"   # Upper Bollinger Band
+  - "BB_middle"  # Middle Band (SMA)
+  - "BB_lower"   # Lower Bollinger Band
+  - "ATR_7"      # 7-period ATR
+  
+  # Volume
+  - "volume_ma_5"   # 5-min volume MA
+  - "volume_ma_15"  # 15-min volume MA
+  - "VWAP"          # Volume Weighted Average Price
+  
+  # Price Action
+  - "high_low_pct"
+  - "price_change"
+  - "order_book_imbalance"
 
 # Model Architecture
 model:
@@ -38,17 +61,31 @@ model:
   dropout: 0.2
   # Available activations: relu, tanh, sigmoid, leaky_relu, elu, swish, gelu
 
-# Training Parameters (DQN)
+# Training Parameters (SAC for high-frequency)
 training:
-  episodes: 1000
-  batch_size: 32
-  learning_rate: 0.0001
-  gamma: 0.95  # Discount factor
+  episodes: 10000  # More episodes for high-frequency patterns
+  batch_size: 512  # Larger batch for stability
+  learning_rate: 0.0001  # Lower learning rate for stability
+  gamma: 0.99  # Higher discount for more steps
+  tau: 0.005  # Soft update parameter
+  alpha: 0.2  # Temperature parameter (entropy)
+  
+  # Replay buffer
+  memory_size: 1000000  # Larger buffer for more diverse experience
+  batch_size: 1024  # Larger batch for stable updates
+  
+  # Training frequency
+  start_steps: 10000  # Random actions in the beginning
+  update_after: 1000  # Start updating after this many steps
+  update_every: 50  # Update every N steps
+  
+  # Epsilon not used in SAC, but keeping for compatibility
   epsilon_start: 1.0
   epsilon_end: 0.01
   epsilon_decay: 0.995
-  memory_size: 10000
-  target_update: 100
+  
+  # Device configuration
+  device: "auto"  # Will be set to cuda if available, else cpu
 
 # SAC Parameters
 sac:
@@ -56,10 +93,11 @@ sac:
   gamma: 0.99
   tau: 0.005  # Soft update parameter
   alpha: 0.2  # Temperature parameter (entropy regularization)
-  batch_size: 256
+  batch_size: 512  # Optimized for RTX 3070 8GB
   memory_size: 1000000
   target_update_interval: 1
   automatic_entropy_tuning: true  # Automatically tune alpha
+  device: "cuda"  # Uses training.device if not specified
 
 # Multi-Agent Settings
 multi_agent:

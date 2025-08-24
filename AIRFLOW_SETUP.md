@@ -127,7 +127,7 @@ airflow dags state trading_system_monitoring 2024-01-15
 airflow tasks log trading_system_monitoring generate_alert_report 2024-01-15
 ```
 
-## 🔧 DAG Configuration
+## DAG Configuration
 
 ### Main Pipeline Tasks
 ```python
@@ -247,7 +247,7 @@ with open(metrics_file, 'r') as f:
 context['task_instance'].xcom_push(key='metrics', value=metrics)
 ```
 
-## 🛠️ Advanced Configuration
+##  Advanced Configuration
 
 ### Parallel Execution
 ```python
@@ -294,7 +294,7 @@ task = PythonOperator(
 )
 ```
 
-## 🚨 Troubleshooting
+##  Troubleshooting
 
 ### Common Issues
 

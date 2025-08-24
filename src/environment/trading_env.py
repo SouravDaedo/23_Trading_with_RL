@@ -17,11 +17,21 @@ class TradingEnvironment(gym.Env):
             self.config = yaml.safe_load(file)
         
         self.data = data.copy()
+        self.timeframe = self.config['data'].get('timeframe', '1h')
         self.lookback_window = self.config['data']['lookback_window']
         self.initial_balance = self.config['environment']['initial_balance']
         self.transaction_cost = self.config['environment']['transaction_cost']
         self.max_position = self.config['environment']['max_position']
         self.reward_scaling = self.config['environment']['reward_scaling']
+        
+        # Timeframe-specific configurations
+        self.timeframe_multipliers = {
+            '1m': 1/60, '5m': 5/60, '15m': 0.25, '30m': 0.5,
+            '1h': 1, '4h': 4, '1d': 24, '1wk': 168, '1mo': 720
+        }
+        
+        # Calculate timeframe multiplier for reward scaling
+        self.timeframe_multiplier = self.timeframe_multipliers.get(self.timeframe, 1.0)
         
         # Environment state
         self.current_step = 0
@@ -95,18 +105,46 @@ class TradingEnvironment(gym.Env):
         # Additional reward shaping
         reward += portfolio_change * self.reward_scaling
         
-        # Penalty for excessive trading
+        # Penalty for excessive trading (scaled by timeframe)
         if action != 0:  # If not holding
-            reward -= self.transaction_cost
+            # Scale transaction cost based on timeframe (less frequent trading in higher timeframes)
+            timeframe_penalty = self.transaction_cost / np.sqrt(self.timeframe_multiplier)
+            reward -= timeframe_penalty
         
         info = {
             'portfolio_value': self.portfolio_value,
             'position': self.position,
             'balance': self.balance,
-            'step': self.current_step
+            'step': self.current_step,
+            'current_price': current_price
         }
         
         return self._get_observation(), reward, done, truncated, info
+    
+    def _get_position_size(self) -> float:
+        """Calculate position size based on timeframe and volatility."""
+        # Base position size (10% of available balance)
+        base_size = 0.1
+        
+        # Adjust position size based on timeframe
+        # Higher timeframes can take larger positions
+        timeframe_factor = min(1.0, np.log1p(self.timeframe_multiplier) / np.log1p(24))  # Scale relative to 1h
+        
+        # Calculate volatility (using ATR if available, otherwise use price range)
+        if 'ATR' in self.data.columns:
+            volatility = self.data['ATR'].iloc[self.current_step] / current_price
+        else:
+            # Use price range as volatility proxy
+            lookback = min(14, len(self.data) - self.current_step)
+            returns = np.diff(np.log(self.prices[self.current_step-lookback+1:self.current_step+1]))
+            volatility = np.std(returns) if len(returns) > 1 else 0.02
+        
+        # Adjust position size based on volatility (inverse relationship)
+        volatility_factor = 0.02 / (volatility + 0.01)  # Normalize to 2% volatility
+        
+        # Combine factors
+        position_size = base_size * timeframe_factor * min(1.0, volatility_factor)
+        return max(0.01, min(0.5, position_size))  # Keep between 1% and 50%
     
     def _execute_action(self, action: int) -> float:
         """Execute the trading action and return immediate reward."""
@@ -115,9 +153,10 @@ class TradingEnvironment(gym.Env):
         
         if action == 1:  # Buy
             if self.position < self.max_position:
-                # Calculate how much we can buy
+                # Calculate position size based on timeframe and volatility
+                position_size = self._get_position_size()
                 max_shares = self.balance / current_price
-                shares_to_buy = min(max_shares * 0.1, max_shares)  # Buy 10% or max available
+                shares_to_buy = min(max_shares * position_size, max_shares)
                 
                 if shares_to_buy > 0:
                     cost = shares_to_buy * current_price * (1 + self.transaction_cost)

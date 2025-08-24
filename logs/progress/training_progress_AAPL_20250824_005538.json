@@ -1,0 +1,38 @@
+{
+  "episodes": 1,
+  "episode_rewards": [
+    4.023835418676409
+  ],
+  "episode_portfolio_values": [
+    9043.3645406854
+  ],
+  "episode_lengths": [
+    783
+  ],
+  "episode_times": [
+    1756011306.1864462
+  ],
+  "total_training_time": 50.668283224105835,
+  "final_stats": {
+    "progress_pct": 0.1,
+    "current_episode": 1,
+    "total_episodes": 1000,
+    "current_step": 670,
+    "current_reward": 3.245629777971293,
+    "current_portfolio": 7852.324994702347,
+    "current_epsilon": 0.7536388635635376,
+    "current_loss": 0.10365454852581024,
+    "steps_per_second": 3.8154651121031073e-07,
+    "episode_actions": {
+      "SELL": 279,
+      "HOLD": 60,
+      "BUY": 331
+    },
+    "avg_recent_reward": 4.023835418676409,
+    "avg_recent_portfolio": 9043.3645406854,
+    "avg_recent_loss": 0.10348576791584492,
+    "total_time": 50.668283224105835,
+    "eta_seconds": 1754255294880.2598,
+    "episodes_per_minute": 3.416834492387342e-08
+  }
+}

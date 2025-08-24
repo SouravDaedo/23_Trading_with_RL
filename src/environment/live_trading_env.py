@@ -11,18 +11,33 @@ class LiveTradingEnvironment(TradingEnvironment):
     """Live trading environment that uses real-time market data."""
     
     def __init__(self, symbol: str, config_path: str = "config/config.yaml", 
-                 update_interval: int = 60):
+                 update_interval: int = None):
         """
         Initialize live trading environment.
         
         Args:
             symbol: Trading symbol (e.g., 'AAPL', 'TSLA')
             config_path: Path to configuration file
-            update_interval: Data update interval in seconds
+            update_interval: Data update interval in seconds. If None, will be set based on timeframe.
         """
         self.symbol = symbol
-        self.update_interval = update_interval
+        self.config_path = config_path
+        
+        # Initialize data fetcher first to get timeframe info
         self.live_fetcher = LiveDataFetcher(symbol, config_path)
+        
+        # Set update interval based on timeframe if not specified
+        if update_interval is None:
+            # Default update intervals based on timeframe
+            timeframe_intervals = {
+                '1m': 60, '5m': 300, '15m': 900, '30m': 1800,
+                '1h': 3600, '4h': 14400, '1d': 86400, '1wk': 604800, '1mo': 2592000
+            }
+            self.update_interval = timeframe_intervals.get(
+                self.live_fetcher.data_loader.timeframe, 3600
+            )
+        else:
+            self.update_interval = update_interval
         
         # Initialize with historical data
         initial_data = self.live_fetcher.get_current_dataset()
@@ -54,18 +69,59 @@ class LiveTradingEnvironment(TradingEnvironment):
             return
         
         current_time = time.time()
-        if current_time - self.last_update_time < self.update_interval:
+        time_since_last_update = current_time - self.last_update_time
+        
+        # Check if it's time to update based on the timeframe
+        if time_since_last_update < self.update_interval:
             return
         
-        # Get latest data
-        latest_data = self.live_fetcher.get_latest_data()
-        if latest_data is not None:
-            # Update the environment's data
-            self.data = self.live_fetcher.get_current_dataset()
-            self.last_update_time = current_time
-            
-            print(f"📈 Data updated at {pd.Timestamp.now()}: "
-                  f"Price=${latest_data.get('Close', 'N/A'):.2f}")
+        try:
+            # Get latest data
+            latest_data = self.live_fetcher.get_latest_data()
+            if latest_data is not None and not latest_data.empty:
+                # Get the complete updated dataset
+                updated_data = self.live_fetcher.get_current_dataset()
+                
+                # Only update if we have new data
+                if len(updated_data) > len(self.data) or \
+                   (len(updated_data) > 0 and len(self.data) > 0 and 
+                    updated_data.index[-1] > self.data.index[-1]):
+                    
+                    # Store the current position and balance before updating
+                    prev_position = self.position
+                    prev_balance = self.balance
+                    
+                    # Update the data
+                    self.data = updated_data
+                    self.last_update_time = current_time
+                    
+                    # Reinitialize price data after update
+                    self._extract_price_data()
+                    
+                    # Log the update
+                    current_price = latest_data.get('Close', float('nan'))
+                    print(f"📈 {self.symbol} {self.timeframe} - "
+                          f"Price: ${current_price:.2f} | "
+                          f"Time: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')} | "
+                          f"Candles: {len(self.data)}")
+                    
+                    # If we're in the middle of an episode, adjust the current step
+                    if hasattr(self, 'current_step') and self.current_step < len(self.data):
+                        # Update the current step to the latest data point
+                        self.current_step = len(self.data) - 1
+                        
+                        # Restore position and balance
+                        self.position = prev_position
+                        self.balance = prev_balance
+                        
+                        # Recalculate portfolio value
+                        self.portfolio_value = self.balance + (
+                            self.position * self.prices[self.current_step]
+                        )
+        except Exception as e:
+            print(f"⚠️  Error updating market data: {str(e)}")
+            # If there's an error, try to continue with existing data
+            self.last_update_time = current_time - (self.update_interval // 2)  # Retry sooner
     
     def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict]:
         """
@@ -104,17 +160,28 @@ class LiveTradingEnvironment(TradingEnvironment):
         """Get current market status and environment info."""
         current_price = self.get_current_price()
         
+        # Calculate position value if we have a current price
+        position_value = 0.0
+        if current_price is not None and hasattr(self, 'position'):
+            position_value = self.position * current_price
+        
+        # Get timeframe information
+        timeframe = getattr(self.live_fetcher.data_loader, 'timeframe', '1h')
+        
         return {
             'symbol': self.symbol,
+            'timeframe': timeframe,
             'current_price': current_price,
             'market_open': self.live_fetcher.is_market_open(),
             'live_mode': self.live_mode,
-            'portfolio_value': self.portfolio_value,
-            'position': self.position,
-            'balance': self.balance,
-            'current_step': self.current_step,
-            'total_steps': len(self.data),
-            'timestamp': pd.Timestamp.now()
+            'portfolio_value': self.portfolio_value if hasattr(self, 'portfolio_value') else 0,
+            'position': self.position if hasattr(self, 'position') else 0,
+            'position_value': position_value,
+            'balance': self.balance if hasattr(self, 'balance') else 0,
+            'current_step': self.current_step if hasattr(self, 'current_step') else 0,
+            'total_steps': len(self.data) if hasattr(self, 'data') else 0,
+            'last_update': pd.Timestamp.now(),
+            'next_update_in': max(0, int((self.last_update_time + self.update_interval) - time.time()))
         }
     
     def __del__(self):

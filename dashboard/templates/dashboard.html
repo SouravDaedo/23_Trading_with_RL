@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RL Trading Agent Dashboard</title>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: rgba(0,0,0,0.2);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 300;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 1.5rem;
+            padding: 2rem;
+            height: calc(100vh - 80px);
+        }
+
+        .card {
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .card h3 {
+            margin-bottom: 1rem;
+            font-weight: 300;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .metric {
+            text-align: center;
+            padding: 1rem;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 1rem;
+        }
+
+        .actions-container {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 1rem;
+        }
+
+        .action-item {
+            text-align: center;
+            padding: 1rem;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            flex: 1;
+            margin: 0 0.5rem;
+        }
+
+        .action-count {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .buy { color: #4CAF50; }
+        .sell { color: #f44336; }
+        .hold { color: #FF9800; }
+
+        .recent-actions {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 1rem;
+        }
+
+        .action-log {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            background: rgba(255,255,255,0.05);
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+
+        .portfolio-overview {
+            grid-column: span 2;
+        }
+
+        .performance-metrics {
+            grid-column: span 1;
+        }
+
+        .price-chart {
+            grid-column: span 2;
+        }
+
+        .agent-params {
+            grid-column: span 1;
+        }
+
+        .actions-summary {
+            grid-column: span 1;
+        }
+
+        .recent-activity {
+            grid-column: span 2;
+        }
+
+        .positive { color: #4CAF50; }
+        .negative { color: #f44336; }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            opacity: 0.7;
+        }
+
+        @media (max-width: 1200px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            .portfolio-overview,
+            .price-chart,
+            .recent-activity {
+                grid-column: span 2;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+                padding: 1rem;
+            }
+            .card {
+                grid-column: span 1 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><i class="fas fa-chart-line"></i> RL Trading Agent Dashboard</h1>
+        <div class="status-indicator">
+            <div class="status-dot"></div>
+            <span id="connection-status">Connected</span>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <!-- Portfolio Overview -->
+        <div class="card portfolio-overview">
+            <h3><i class="fas fa-wallet"></i> Portfolio Overview</h3>
+            <div class="metrics-grid">
+                <div class="metric">
+                    <div class="metric-value" id="portfolio-value">$10,000</div>
+                    <div class="metric-label">Total Value</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="current-price">$0.00</div>
+                    <div class="metric-label">Current Price</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="cash-position">$10,000</div>
+                    <div class="metric-label">Cash</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="shares-position">0</div>
+                    <div class="metric-label">Shares</div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="portfolioChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Performance Metrics -->
+        <div class="card performance-metrics">
+            <h3><i class="fas fa-trophy"></i> Performance</h3>
+            <div class="metric">
+                <div class="metric-value" id="total-return">0.00%</div>
+                <div class="metric-label">Total Return</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="sharpe-ratio">0.000</div>
+                <div class="metric-label">Sharpe Ratio</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="max-drawdown">0.00%</div>
+                <div class="metric-label">Max Drawdown</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="win-rate">0.0%</div>
+                <div class="metric-label">Win Rate</div>
+            </div>
+        </div>
+
+        <!-- Price Chart -->
+        <div class="card price-chart">
+            <h3><i class="fas fa-chart-area"></i> Price Movement (5-Day Window)</h3>
+            <div class="chart-container">
+                <canvas id="priceChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Agent Parameters -->
+        <div class="card agent-params">
+            <h3><i class="fas fa-robot"></i> Agent Status</h3>
+            <div class="metric">
+                <div class="metric-value" id="episode-num">0</div>
+                <div class="metric-label">Episode</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="step-num">0</div>
+                <div class="metric-label">Step</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="epsilon-alpha">0.000</div>
+                <div class="metric-label" id="epsilon-alpha-label">Epsilon</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value" id="current-loss">0.0000</div>
+                <div class="metric-label">Loss</div>
+            </div>
+        </div>
+
+        <!-- Actions Summary -->
+        <div class="card actions-summary">
+            <h3><i class="fas fa-exchange-alt"></i> Actions</h3>
+            <div class="actions-container">
+                <div class="action-item">
+                    <div class="action-count buy" id="buy-count">0</div>
+                    <div>BUY</div>
+                </div>
+                <div class="action-item">
+                    <div class="action-count hold" id="hold-count">0</div>
+                    <div>HOLD</div>
+                </div>
+                <div class="action-item">
+                    <div class="action-count sell" id="sell-count">0</div>
+                    <div>SELL</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card recent-activity">
+            <h3><i class="fas fa-history"></i> Recent Actions</h3>
+            <div class="recent-actions" id="recent-actions">
+                <div class="loading">Waiting for data...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Socket.IO
+        const socket = io();
+        
+        // Chart configurations
+        const chartConfig = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: { color: '#fff' }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#fff' },
+                    grid: { color: 'rgba(255,255,255,0.1)' }
+                },
+                y: {
+                    ticks: { color: '#fff' },
+                    grid: { color: 'rgba(255,255,255,0.1)' }
+                }
+            }
+        };
+
+        // Initialize charts
+        const portfolioChart = new Chart(document.getElementById('portfolioChart'), {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Portfolio Value',
+                    data: [],
+                    borderColor: '#4CAF50',
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: chartConfig
+        });
+
+        const priceChart = new Chart(document.getElementById('priceChart'), {
+            type: 'line',
+            data: {
+                labels: ['D-4', 'D-3', 'D-2', 'D-1', 'Current'],
+                datasets: [{
+                    label: '5-Day Price History',
+                    data: [],
+                    borderColor: '#4CAF50',
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#4CAF50',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    borderWidth: 2,
+                    lineTension: 0.3
+                }]
+            },
+            options: {
+                ...chartConfig,
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    ...chartConfig.scales,
+                    x: {
+                        ...chartConfig.scales.x,
+                        title: {
+                            display: true,
+                            text: 'Trading Days',
+                            color: '#fff',
+                            font: {
+                                weight: 'bold',
+                                size: 12
+                            }
+                        },
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: '#fff',
+                            font: {
+                                weight: 'bold'
+                            }
+                        }
+                    },
+                    y: {
+                        ...chartConfig.scales.y,
+                        title: {
+                            display: true,
+                            text: 'Price ($)',
+                            color: '#fff',
+                            font: {
+                                weight: 'bold',
+                                size: 12
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: '#fff',
+                            callback: function(value) {
+                                return '$' + value.toFixed(2);
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    ...chartConfig.plugins,
+                    legend: {
+                        labels: {
+                            color: '#fff',
+                            font: {
+                                size: 12,
+                                weight: 'bold'
+                            }
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleFont: {
+                            weight: 'bold',
+                            size: 13
+                        },
+                        bodyFont: {
+                            size: 13
+                        },
+                        callbacks: {
+                            label: function(context) {
+                                return `Price: $${context.parsed.y.toFixed(2)}`;
+                            }
+                        },
+                        displayColors: false,
+                        padding: 10,
+                        cornerRadius: 5
+                    }
+                },
+                animation: {
+                    duration: 500,
+                    easing: 'easeOutQuart'
+                }
+            }
+        });
+
+        // Socket event handlers
+        socket.on('connect', function() {
+            document.getElementById('connection-status').textContent = 'Connected';
+            console.log('Connected to dashboard');
+        });
+
+        socket.on('disconnect', function() {
+            document.getElementById('connection-status').textContent = 'Disconnected';
+            console.log('Disconnected from dashboard');
+        });
+
+        socket.on('data_update', function(data) {
+            updateDashboard(data);
+        });
+
+        function updateDashboard(data) {
+            console.log('Dashboard update received:', data);
+            
+            // Update portfolio metrics
+            document.getElementById('portfolio-value').textContent = `$${data.portfolio_value.toLocaleString()}`;
+            document.getElementById('current-price').textContent = `$${data.current_price.toFixed(2)}`;
+            
+            // Update positions
+            if (data.positions) {
+                document.getElementById('cash-position').textContent = `$${data.positions.cash.toLocaleString()}`;
+                document.getElementById('shares-position').textContent = data.positions.shares.toLocaleString();
+            }
+
+            // Update performance metrics
+            const metrics = data.performance_metrics || {
+                total_return: 0,
+                sharpe_ratio: 0,
+                max_drawdown: 0,
+                win_rate: 0
+            };
+            document.getElementById('total-return').textContent = `${metrics.total_return}%`;
+            document.getElementById('total-return').className = `metric-value ${metrics.total_return >= 0 ? 'positive' : 'negative'}`;
+            
+            document.getElementById('sharpe-ratio').textContent = metrics.sharpe_ratio.toFixed(3);
+            document.getElementById('max-drawdown').textContent = `${metrics.max_drawdown}%`;
+            document.getElementById('win-rate').textContent = `${metrics.win_rate}%`;
+
+            // Update agent parameters
+            document.getElementById('episode-num').textContent = data.episode || 0;
+            document.getElementById('step-num').textContent = data.step || 0;
+            
+            const agentParams = data.agent_params || {};
+            if (agentParams.epsilon !== undefined) {
+                document.getElementById('epsilon-alpha').textContent = agentParams.epsilon.toFixed(3);
+                document.getElementById('epsilon-alpha-label').textContent = 'Epsilon';
+            } else if (agentParams.alpha !== undefined) {
+                document.getElementById('epsilon-alpha').textContent = agentParams.alpha.toFixed(3);
+                document.getElementById('epsilon-alpha-label').textContent = 'Alpha';
+            }
+            
+            document.getElementById('current-loss').textContent = (agentParams.loss || 0).toFixed(4);
+
+            // Update action counts
+            const actions = data.actions || {BUY: 0, HOLD: 0, SELL: 0};
+            document.getElementById('buy-count').textContent = actions.BUY;
+            document.getElementById('hold-count').textContent = actions.HOLD;
+            document.getElementById('sell-count').textContent = actions.SELL;
+
+            // Update charts
+            updateCharts(data);
+
+            // Update recent actions
+            updateRecentActions(data.recent_actions);
+        }
+
+        function updateCharts(data) {
+            // Update portfolio chart
+            if (data.portfolio_history) {
+                const history = Array.isArray(data.portfolio_history) ? data.portfolio_history : [data.portfolio_history];
+                portfolioChart.data.labels = Array.from({length: history.length}, (_, i) => i + 1);
+                portfolioChart.data.datasets[0].data = history;
+                portfolioChart.update('none'); // 'none' prevents animation for smoother updates
+            }
+            
+            // Update price chart with 5-day window
+            if (data.price_window && Array.isArray(data.price_window) && data.price_window.length > 0) {
+                // Get the price window data and ensure it's an array of numbers
+                let prices = data.price_window.map(Number);
+                
+                // Update chart data with the 5-day window
+                priceChart.data.datasets[0].data = prices;
+                
+                // Update labels if provided, otherwise use default D-4 to Current labels
+                if (data.timestamp_window && data.timestamp_window.length === prices.length) {
+                    priceChart.data.labels = data.timestamp_window;
+                } else {
+                    // Fallback to default labels if not provided
+                    const daysAgo = Math.min(4, prices.length - 1);
+                    priceChart.data.labels = Array.from({length: prices.length}, (_, i) => {
+                        const day = daysAgo - i;
+                        return day === 0 ? 'Current' : `D-${day}`;
+                    }).reverse();
+                }
+                
+                // Adjust y-axis to show some padding around the price range
+                if (prices.length > 0) {
+                    const minPrice = Math.min(...prices);
+                    const maxPrice = Math.max(...prices);
+                    const range = maxPrice - minPrice;
+                    const padding = range > 0 ? range * 0.1 : Math.max(1, minPrice * 0.05);
+                    
+                    priceChart.options.scales.y.min = Math.max(0, minPrice - padding);
+                    priceChart.options.scales.y.max = maxPrice + padding;
+                }
+                
+                priceChart.update('active');
+            } 
+            // Fallback to current price if no window data
+            else if (data.current_price !== undefined) {
+                priceChart.data.labels = ['Current'];
+                priceChart.data.datasets[0].data = [data.current_price];
+                
+                // Set reasonable y-axis range around current price
+                priceChart.options.scales.y.min = data.current_price * 0.99;
+                priceChart.options.scales.y.max = data.current_price * 1.01;
+                
+                priceChart.update('active');
+            } else {
+                console.log('No price data available');
+            }
+        }
+
+        function updateRecentActions(actions) {
+            const container = document.getElementById('recent-actions');
+            
+            if (!actions || actions.length === 0) {
+                container.innerHTML = '<div class="loading">No recent actions</div>';
+                return;
+            }
+
+            const actionsHtml = actions.slice(-10).reverse().map(action => {
+                const actionClass = action.action.toLowerCase();
+                return `
+                    <div class="action-log">
+                        <span class="${actionClass}">${action.action}</span>
+                        <span>$${action.price ? action.price.toFixed(2) : 'N/A'}</span>
+                        <span>${action.time || 'N/A'}</span>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = actionsHtml;
+        }
+
+        // Initial data fetch
+        fetch('/api/data')
+            .then(response => response.json())
+            .then(data => updateDashboard(data))
+            .catch(error => console.error('Error fetching initial data:', error));
+    </script>
+</body>
+</html>

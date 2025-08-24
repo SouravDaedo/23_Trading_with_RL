@@ -107,7 +107,16 @@ class DQNAgent:
         
         self.state_size = state_size
         self.action_size = action_size
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Device configuration
+        device_config = self.config['training'].get('device', 'auto')
+        if device_config == 'auto':
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        elif device_config == 'cuda':
+            if not torch.cuda.is_available():
+                raise RuntimeError("CUDA requested but not available!")
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
         
         # Hyperparameters
         self.learning_rate = self.config['training']['learning_rate']

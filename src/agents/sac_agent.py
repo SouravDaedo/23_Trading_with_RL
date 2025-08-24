@@ -155,9 +155,10 @@ class Critic(nn.Module):
 class SACReplayBuffer:
     """Experience replay buffer for SAC."""
     
-    def __init__(self, capacity: int):
+    def __init__(self, capacity: int, device: torch.device):
         """Initialize replay buffer."""
         self.buffer = deque(maxlen=capacity)
+        self.device = device
     
     def push(self, state, action, reward, next_state, done):
         """Add experience to buffer."""
@@ -168,11 +169,11 @@ class SACReplayBuffer:
         batch = random.sample(self.buffer, batch_size)
         state, action, reward, next_state, done = map(np.stack, zip(*batch))
         return (
-            torch.FloatTensor(state),
-            torch.FloatTensor(action),
-            torch.FloatTensor(reward).unsqueeze(1),
-            torch.FloatTensor(next_state),
-            torch.FloatTensor(done).unsqueeze(1)
+            torch.FloatTensor(state).to(self.device),
+            torch.FloatTensor(action).to(self.device),
+            torch.FloatTensor(reward).unsqueeze(1).to(self.device),
+            torch.FloatTensor(next_state).to(self.device),
+            torch.FloatTensor(done).unsqueeze(1).to(self.device)
         )
     
     def __len__(self):
@@ -191,7 +192,17 @@ class SACAgent:
         
         self.state_size = state_size
         self.action_size = action_size
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Device configuration
+        device_config = self.config.get('training', {}).get('device', 'auto')
+        if device_config == 'auto':
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        elif device_config == 'cuda':
+            if not torch.cuda.is_available():
+                raise RuntimeError("CUDA requested but not available!")
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
         
         # SAC hyperparameters
         sac_config = self.config.get('sac', {})
@@ -234,7 +245,7 @@ class SACAgent:
         
         # Replay buffer
         memory_size = sac_config.get('memory_size', 1000000)
-        self.memory = SACReplayBuffer(memory_size)
+        self.memory = SACReplayBuffer(memory_size, self.device)
         
         # Training stats
         self.training_step = 0

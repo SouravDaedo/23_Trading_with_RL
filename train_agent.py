@@ -63,9 +63,10 @@ def train_agent(config_path="config/config.yaml"):
     episode_portfolio_values = []
     episode_lengths = []
     
-    print(f"\n🎯 Starting training for {episodes} episodes...")
+    print(f"\n Starting training for {episodes} episodes...")
     print("-" * 60)
-    
+    ep_int = 10
+
     for episode in range(episodes):
         state, _ = env.reset()
         total_reward = 0
@@ -98,9 +99,9 @@ def train_agent(config_path="config/config.yaml"):
         episode_lengths.append(steps)
         
         # Print progress
-        if episode % 50 == 0:
-            avg_reward = np.mean(episode_rewards[-50:])
-            avg_portfolio = np.mean(episode_portfolio_values[-50:])
+        if episode % ep_int == 0:
+            avg_reward = np.mean(episode_rewards[-ep_int:])
+            avg_portfolio = np.mean(episode_portfolio_values[-ep_int:])
             stats = agent.get_training_stats()
             
             print(f"Episode {episode:4d} | "
@@ -110,10 +111,10 @@ def train_agent(config_path="config/config.yaml"):
                   f"Epsilon: {stats['epsilon']:.3f} | "
                   f"Loss: {stats['avg_loss']:.4f}")
     
-    print("\n✅ Training completed!")
+    print("\n Training completed!")
     
     # Save trained model
-    print("\n💾 Saving trained model...")
+    print("\n Saving trained model...")
     os.makedirs('models', exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_path = f'models/dqn_agent_{symbol}_{timestamp}.pth'
