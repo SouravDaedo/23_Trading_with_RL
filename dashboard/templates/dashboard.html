@@ -384,108 +384,60 @@
             options: chartConfig
         });
 
+        // Initialize price chart with same config as portfolio chart
         const priceChart = new Chart(document.getElementById('priceChart'), {
             type: 'line',
             data: {
-                labels: ['D-4', 'D-3', 'D-2', 'D-1', 'Current'],
+                labels: [],
                 datasets: [{
-                    label: '5-Day Price History',
+                    label: 'Price History',
                     data: [],
-                    borderColor: '#4CAF50',
-                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-                    tension: 0.3,
+                    borderColor: '#2196F3',
+                    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                    tension: 0.4,
                     fill: true,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                    pointBackgroundColor: '#4CAF50',
-                    pointBorderColor: '#ffffff',
-                    pointBorderWidth: 2,
-                    borderWidth: 2,
-                    lineTension: 0.3
+                    pointRadius: 2,
+                    pointHoverRadius: 4,
+                    borderWidth: 2
                 }]
             },
             options: {
                 ...chartConfig,
-                responsive: true,
-                maintainAspectRatio: false,
                 scales: {
                     ...chartConfig.scales,
-                    x: {
-                        ...chartConfig.scales.x,
-                        title: {
-                            display: true,
-                            text: 'Trading Days',
-                            color: '#fff',
-                            font: {
-                                weight: 'bold',
-                                size: 12
-                            }
-                        },
-                        grid: {
-                            display: false
-                        },
-                        ticks: {
-                            color: '#fff',
-                            font: {
-                                weight: 'bold'
-                            }
-                        }
-                    },
                     y: {
                         ...chartConfig.scales.y,
                         title: {
                             display: true,
                             text: 'Price ($)',
-                            color: '#fff',
+                            color: '#2196F3',
                             font: {
-                                weight: 'bold',
                                 size: 12
                             }
-                        },
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        },
-                        ticks: {
+                        }
+                    },
+                    x: {
+                        ...chartConfig.scales.x,
+                        title: {
+                            display: true,
+                            text: 'Step',
                             color: '#fff',
-                            callback: function(value) {
-                                return '$' + value.toFixed(2);
+                            font: {
+                                size: 12
                             }
                         }
                     }
                 },
                 plugins: {
                     ...chartConfig.plugins,
-                    legend: {
-                        labels: {
-                            color: '#fff',
-                            font: {
-                                size: 12,
-                                weight: 'bold'
-                            }
-                        }
-                    },
                     tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        titleFont: {
-                            weight: 'bold',
-                            size: 13
-                        },
-                        bodyFont: {
-                            size: 13
-                        },
+                        ...chartConfig.plugins.tooltip,
                         callbacks: {
                             label: function(context) {
                                 return `Price: $${context.parsed.y.toFixed(2)}`;
                             }
-                        },
-                        displayColors: false,
-                        padding: 10,
-                        cornerRadius: 5
+                        }
                     }
-                },
-                animation: {
-                    duration: 500,
-                    easing: 'easeOutQuart'
                 }
             }
         });
@@ -594,49 +546,12 @@
                 portfolioChart.update('none'); // 'none' prevents animation for smoother updates
             }
             
-            // Update price chart with 5-day window
-            if (data.price_window && Array.isArray(data.price_window) && data.price_window.length > 0) {
-                // Get the price window data and ensure it's an array of numbers
-                let prices = data.price_window.map(Number);
-                
-                // Update chart data with the 5-day window
+            // Update price chart
+            if (data.price_history) {
+                const prices = Array.isArray(data.price_history) ? data.price_history : [data.price_history];
+                priceChart.data.labels = Array.from({length: prices.length}, (_, i) => i + 1);
                 priceChart.data.datasets[0].data = prices;
-                
-                // Update labels if provided, otherwise use default D-4 to Current labels
-                if (data.timestamp_window && data.timestamp_window.length === prices.length) {
-                    priceChart.data.labels = data.timestamp_window;
-                } else {
-                    // Fallback to default labels if not provided
-                    const daysAgo = Math.min(4, prices.length - 1);
-                    priceChart.data.labels = Array.from({length: prices.length}, (_, i) => {
-                        const day = daysAgo - i;
-                        return day === 0 ? 'Current' : `D-${day}`;
-                    }).reverse();
-                }
-                
-                // Adjust y-axis to show some padding around the price range
-                if (prices.length > 0) {
-                    const minPrice = Math.min(...prices);
-                    const maxPrice = Math.max(...prices);
-                    const range = maxPrice - minPrice;
-                    const padding = range > 0 ? range * 0.1 : Math.max(1, minPrice * 0.05);
-                    
-                    priceChart.options.scales.y.min = Math.max(0, minPrice - padding);
-                    priceChart.options.scales.y.max = maxPrice + padding;
-                }
-                
-                priceChart.update('active');
-            } 
-            // Fallback to current price if no window data
-            else if (data.current_price !== undefined) {
-                priceChart.data.labels = ['Current'];
-                priceChart.data.datasets[0].data = [data.current_price];
-                
-                // Set reasonable y-axis range around current price
-                priceChart.options.scales.y.min = data.current_price * 0.99;
-                priceChart.options.scales.y.max = data.current_price * 1.01;
-                
-                priceChart.update('active');
+                priceChart.update('none'); // 'none' prevents animation for smoother updates
             } else {
                 console.log('No price data available');
             }
