@@ -158,6 +158,10 @@ class DQNAgent:
         """Store experience in replay buffer."""
         self.memory.push(state, action, reward, next_state, done)
     
+    def store_transition(self, state, action, reward, next_state, done):
+        """Store transition in replay buffer (standardized method name)."""
+        self.remember(state, action, reward, next_state, done)
+    
     def act(self, state, training=True):
         """Choose action using epsilon-greedy policy."""
         if training and random.random() <= self.epsilon:

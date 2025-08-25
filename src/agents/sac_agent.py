@@ -285,7 +285,7 @@ class SACAgent:
         return action.cpu().numpy()[0]
     
     def store_transition(self, state, action, reward, next_state, done):
-        """Store transition in replay buffer."""
+        """Store transition in replay buffer."""     
         self.memory.push(state, action, reward, next_state, done)
     
     def update_parameters(self):

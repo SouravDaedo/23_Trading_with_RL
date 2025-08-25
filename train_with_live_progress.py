@@ -432,10 +432,7 @@ def train_with_live_progress(config_path="config/config.yaml", agent_type="sac",
                         )
                         
                         # Store the transition in memory
-                        if hasattr(agent, 'replay_buffer'):
-                            agent.replay_buffer.push(
-                                state, action, reward, next_state, done
-                            )
+                        agent.store_transition(state, action, reward, next_state, done)
                         
                         # Update state for next iteration
                         state = next_state
