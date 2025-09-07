@@ -176,6 +176,7 @@ def update_data():
     """API endpoint to update data from training script"""
     try:
         new_data = request.json
+        print(f"Dashboard received data: {json.dumps(new_data, indent=2)}")
         data_manager.update_data(new_data)
         
         # Emit to all connected clients

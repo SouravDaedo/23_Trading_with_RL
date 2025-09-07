@@ -32,6 +32,7 @@ from agents.sac_agent import SACAgent
 try:
     from dashboard_integration import DashboardConnector
     DASHBOARD_AVAILABLE = True
+    print 
 except ImportError:
     DASHBOARD_AVAILABLE = False
     print("Warning: Dashboard integration not available. Install flask and flask-socketio to enable.")
@@ -47,6 +48,10 @@ class LiveProgressMonitor:
         
         # Initialize dashboard connector if enabled
         self.dashboard = None
+
+        print (f"enable_dashboard: {enable_dashboard}")
+        print (f"DASHBOARD_AVAILABLE: {DASHBOARD_AVAILABLE}")
+
         if enable_dashboard and DASHBOARD_AVAILABLE:
             self.dashboard = DashboardConnector()
             print("Dashboard connector initialized")
@@ -152,7 +157,12 @@ class LiveProgressMonitor:
         if self.dashboard:
             agent_params = {
                 'epsilon' if self.agent_type.lower() == 'dqn' else 'alpha': self.current_epsilon,
-                'loss': self.current_loss
+                'loss': self.current_loss,
+                'steps_per_second': self.steps_per_second,
+                'episode_duration': episode_duration,
+                'buy_count': self.episode_actions['BUY'],
+                'sell_count': self.episode_actions['SELL'],
+                'hold_count': self.episode_actions['HOLD']
             }
             
             # Calculate positions (simplified)
@@ -161,7 +171,8 @@ class LiveProgressMonitor:
                 'shares': int(self.current_portfolio * 0.5 / current_price),
                 'total_value': self.current_portfolio
             }
-            
+
+                  
             self.dashboard.update_step(
                 episode=self.current_episode,
                 step=self.current_step,
@@ -441,9 +452,13 @@ def train_with_live_progress(config_path="config/config.yaml", agent_type="sac",
                         # Train the agent
                         if (step + 1) % config['training'].get('update_every', 1) == 0:
                             if hasattr(agent, 'update_parameters'):
-                                result = agent.update_parameters()
+                                result = agent.update_parameters()                                
                                 if result is not None and 'actor_loss' in result:
-                                    monitor.current_loss = result['actor_loss']
+                                    monitor.actor_loss = result['actor_loss']
+                                    monitor.critic1_loss = result['critic1_loss']
+                                    monitor.critic2_loss = result['critic2_loss']
+                                    monitor.alpha_loss = result['alpha_loss']
+                                    monitor.alpha = result['alpha']
                         
                         # Increment step counter
                         step += 1

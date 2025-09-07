@@ -175,6 +175,7 @@ class DashboardIntegratedMonitor:
         self.current_price = 0
         self.current_epsilon = 0
         self.current_loss = 0
+        self.sac_loss = {}
         
         # History tracking
         self.portfolio_history = []
@@ -230,6 +231,11 @@ class DashboardIntegratedMonitor:
                 self.current_loss = loss.item()
             elif isinstance(loss, dict):
                 self.current_loss = loss.get('critic1_loss', 0.0)
+                self.sac_loss['critic1_loss'] = loss.get('critic1_loss', 0.0)
+                self.sac_loss['critic2_loss'] = loss.get('critic2_loss', 0.0)
+                self.sac_loss['actor_loss'] = loss.get('actor_loss', 0.0)
+                self.sac_loss['alpha_loss'] = loss.get('alpha_loss', 0.0)
+   
                 if hasattr(self.current_loss, 'item'):
                     self.current_loss = self.current_loss.item()
             else:
