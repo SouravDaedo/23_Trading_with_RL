@@ -49,9 +49,6 @@ class LiveProgressMonitor:
         # Initialize dashboard connector if enabled
         self.dashboard = None
 
-        print (f"enable_dashboard: {enable_dashboard}")
-        print (f"DASHBOARD_AVAILABLE: {DASHBOARD_AVAILABLE}")
-
         if enable_dashboard and DASHBOARD_AVAILABLE:
             self.dashboard = DashboardConnector()
             print("Dashboard connector initialized")
@@ -73,6 +70,8 @@ class LiveProgressMonitor:
         self.current_portfolio = 0
         self.current_epsilon = 0
         self.current_loss = 0
+
+        self.agent_tracking = {'critic1_loss': 0, 'critic2_loss': 0, 'actor_loss': 0, 'alpha': 0,'alpha_loss': 0}
         self.steps_per_second = 0
         
         # Action tracking (works for both discrete and continuous)
@@ -138,6 +137,11 @@ class LiveProgressMonitor:
             elif isinstance(loss, dict):
                 # For SAC agent that returns dict of losses, use critic1_loss as representative
                 self.current_loss = loss.get('critic1_loss', 0.0)
+                self.agent_tracking['critic1_loss'] = loss.get('critic1_loss', 0.0)
+                self.agent_tracking['critic2_loss'] = loss.get('critic2_loss', 0.0)
+                self.agent_tracking['actor_loss'] = loss.get('actor_loss', 0.0)
+                self.agent_tracking['alpha_loss'] = loss.get('alpha_loss', 0.0)
+                self.agent_tracking['alpha'] = loss.get('alpha', 0.0)
                 if hasattr(self.current_loss, 'item'):
                     self.current_loss = self.current_loss.item()
             else:
@@ -158,11 +162,16 @@ class LiveProgressMonitor:
             agent_params = {
                 'epsilon' if self.agent_type.lower() == 'dqn' else 'alpha': self.current_epsilon,
                 'loss': self.current_loss,
-                'steps_per_second': self.steps_per_second,
+                'steps_per_minute': self.steps_per_second*60,
                 'episode_duration': episode_duration,
                 'buy_count': self.episode_actions['BUY'],
                 'sell_count': self.episode_actions['SELL'],
-                'hold_count': self.episode_actions['HOLD']
+                'hold_count': self.episode_actions['HOLD'],
+                'critic1_loss': self.agent_tracking['critic1_loss'],
+                'critic2_loss': self.agent_tracking['critic2_loss'],
+                'actor_loss': self.agent_tracking['actor_loss'],
+                'alpha_loss': self.agent_tracking['alpha_loss'],
+                'alpha': self.agent_tracking['alpha']
             }
             
             # Calculate positions (simplified)
@@ -172,7 +181,7 @@ class LiveProgressMonitor:
                 'total_value': self.current_portfolio
             }
 
-                  
+                                      
             self.dashboard.update_step(
                 episode=self.current_episode,
                 step=self.current_step,
